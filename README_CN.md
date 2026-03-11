@@ -24,16 +24,26 @@
 
 ---
 
-## 🔄 两种工作流
+## 🔄 工作流
+
+所有 Skills 组成完整科研流水线：
+
+### 完整流程 🚀
+
+```
+/research-lit → /novelty-check → 实现 → /auto-review-loop → 投稿
+  (调研文献)      (查新验证)     (写代码)    (自动改到能投)     (搞定!)
+```
 
 ### 工作流 1：自动科研循环 🔁（睡一觉醒来看结果）
 
 > "帮我 review 论文，修复问题，循环到通过为止。"
 
-**涉及 Skills：** `auto-review-loop` + `research-review` + `analyze-results` + `monitor-experiment`
+**涉及 Skills：** `auto-review-loop` + `research-review` + `novelty-check` + `analyze-results` + `monitor-experiment`
 
 ```
 外部 LLM 评审 → Claude Code 实现修复 → 跑实验 → 收结果 → 再评审 → 循环
+                ↑ 需要新方向时自动 /novelty-check 查新
 ```
 
 用法：
