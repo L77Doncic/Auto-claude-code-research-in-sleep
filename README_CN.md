@@ -733,27 +733,30 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 ## 🔀 替代模型组合
 
-没有 Claude / OpenAI API？可以换用其他模型——同样的跨模型架构，不同的提供商。详见 [LLM API 混搭配置指南](docs/LLM_API_MIX_MATCH_GUIDE.md)（含 DeepSeek、Kimi、SiliconFlow 等 8+ 提供商配置）。
+没有 Claude / OpenAI API？可以换用其他模型——同样的跨模型架构，不同的提供商。
 
-| 角色 | 默认 | 方案 A：GLM + GPT | 方案 B：GLM + MiniMax |
-|------|------|-------------------|----------------------|
-| 执行者（Claude Code） | Claude Opus/Sonnet | GLM-5（智谱 API） | GLM-5（智谱 API） |
-| 审稿人（Codex MCP） | GPT-5.4 | GPT-5.4（OpenAI API） | MiniMax-M2.5（MiniMax API） |
-| 需要 OpenAI API？ | 是 | 是 | **否** |
+> ⭐ **强烈推荐使用 Claude + GPT-5.4（默认组合）。** 这是经过最充分测试、最稳定的组合。替代方案可用但可能需要调整 prompt。
 
-### 第 1 步：安装 Claude Code 和 Codex CLI
+| | 执行者 | 审稿人 | 需要 Claude API？ | 需要 OpenAI API？ | 配置指南 |
+|---|--------|--------|:---:|:---:|---------|
+| **默认** ⭐ | Claude Opus/Sonnet | GPT-5.4（Codex MCP） | 是 | 是 | [快速开始](#-快速开始) |
+| **方案 A** | GLM-5（Z.ai） | GPT-5.4（Codex MCP） | 否 | 是 | [配置见下](#方案-a-glm--gpt) |
+| **方案 B** | GLM-5（Z.ai） | MiniMax-M2.5 | 否 | 否 | [MINIMAX_MCP_GUIDE](docs/MINIMAX_MCP_GUIDE.md) |
+| **方案 C** | 任意 CC 兼容 | 任意 OpenAI 兼容 | 看情况 | 否 | [LLM_API_MIX_MATCH_GUIDE](docs/LLM_API_MIX_MATCH_GUIDE.md) |
+
+**方案 C** 覆盖 8+ 提供商：DeepSeek、Kimi、SiliconFlow、阿里百炼、零一万物等，通过通用 [`llm-chat`](mcp-servers/llm-chat/) MCP 服务器。
+
+### 方案 A: GLM + GPT
+
+只替换执行者（Claude → GLM），保留 GPT-5.4 通过 Codex MCP 审稿。
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 npm install -g @openai/codex
+codex setup   # 提示选模型时选 gpt-5.4
 ```
 
-### 第 2 步：配置 `~/.claude/settings.json`
-
-终端输入：`nano ~/.claude/settings.json`
-
-<details>
-<summary><b>方案 A：GLM（执行者）+ GPT（审稿人）</b> — 只替换 Claude，保留 GPT-5.4 审稿</summary>
+配置 `~/.claude/settings.json`：
 
 ```json
 {
@@ -768,9 +771,7 @@ npm install -g @openai/codex
     "mcpServers": {
         "codex": {
             "command": "/opt/homebrew/bin/codex",
-            "args": [
-                "mcp-server"
-            ]
+            "args": ["mcp-server"]
         }
     }
 }
@@ -778,82 +779,35 @@ npm install -g @openai/codex
 
 Codex CLI 使用你已有的 `OPENAI_API_KEY`（来自 `~/.codex/config.toml` 或环境变量）——审稿端不需要额外配置。
 
-</details>
+### 方案 B: GLM + MiniMax
 
-<details>
-<summary><b>方案 B：GLM（执行者）+ MiniMax（审稿人）</b> — 无需 Claude 或 OpenAI API</summary>
+无需 Claude 或 OpenAI API。使用自定义 MiniMax MCP 服务器替代 Codex（因为 MiniMax 不支持 OpenAI 的 Responses API）。完整指南：[`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md)。
 
-```json
-{
-    "env": {
-        "ANTHROPIC_AUTH_TOKEN": "your_zai_api_key",
-        "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-        "API_TIMEOUT_MS": "3000000",
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
-        "MINIMAX_API_KEY": "your_minimax_api_key"
-    },
-    "mcpServers": {
-        "minimax-chat": {
-            "command": "/usr/bin/python3",
-            "args": ["/Users/YOUR_USERNAME/.claude/mcp-servers/minimax-chat/server.py"],
-            "env": {
-                "MINIMAX_API_KEY": "your_minimax_api_key",
-                "MINIMAX_BASE_URL": "https://api.minimax.chat/v1",
-                "MINIMAX_MODEL": "MiniMax-M2.5"
-            }
-        }
-    }
-}
-```
+### 方案 C: 任意执行者 + 任意审稿人
 
-> **⚠️ 方案 B 额外步骤：** Codex MCP 使用 OpenAI 的 Responses API (`/v1/responses`)，MiniMax 不支持该接口（[详情](https://github.com/openai/codex/discussions/7782)）。因此方案 B 使用**自定义 MiniMax MCP 服务器**替代 Codex。完整指南：[`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md)。快速步骤：
->
-> 1. 复制 `mcp-servers/minimax-chat/server.py` → `~/.claude/mcp-servers/minimax-chat/server.py`
-> 2. `pip3 install httpx`
-> 3. 配置完成后，让 Claude Code 改写所有 skill：
->
-> ```
-> 读一下 skills/auto-review-loop-minimax/SKILL.md 作为参考模板。
-> 它把 mcp__codex__codex 替换成了 mcp__minimax-chat__minimax_chat。
-> 现在请把所有其他使用 mcp__codex__codex / mcp__codex__codex-reply 的 skill
-> 都按照同样的模式改写成使用 mcp__minimax-chat__minimax_chat。
-> ```
+通过通用 `llm-chat` MCP 服务器自由混搭，支持任意 OpenAI 兼容 API 作为审稿人。完整指南：[`docs/LLM_API_MIX_MATCH_GUIDE.md`](docs/LLM_API_MIX_MATCH_GUIDE.md)。
 
-</details>
+示例组合：GLM + DeepSeek、Kimi + MiniMax、Claude + DeepSeek、LongCat + GLM 等。
 
-保存：`Ctrl+O` → `Enter` → `Ctrl+X`
-
-### 第 3 步：安装 Skills 并运行
+### 配置完成后：安装 Skills 并验证
 
 ```bash
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 cd Auto-claude-code-research-in-sleep
 cp -r skills/* ~/.claude/skills/
-
-# 启动 Claude Code（现在由 GLM 驱动）
 claude
 ```
 
-### 第 4 步：让 GLM 读一遍项目 ⚠️ 重要
+> **⚠️ 非 Claude 执行者（GLM、Kimi 等）：** 需要让模型先读一遍项目，确保 skill 能正确解析：
+>
+> ```
+> 读一下这个项目，验证所有 skills 是否正常：
+> /idea-creator, /research-review, /auto-review-loop, /novelty-check,
+> /idea-discovery, /research-pipeline, /research-lit, /run-experiment,
+> /analyze-results, /monitor-experiment, /pixel-art
+> ```
 
-> **🔴 不要跳过这一步。** GLM 的 prompt 处理方式与 Claude 不同，必须让 GLM 先读一遍项目，确保 skill 文件能正确解析。
-
-启动 `claude` 后，在对话中输入：
-
-```
-读一下这个项目，验证所有 skills 是否正常：
-/idea-creator, /research-review, /auto-review-loop, /novelty-check,
-/idea-discovery, /research-pipeline, /research-lit, /run-experiment,
-/analyze-results, /monitor-experiment, /pixel-art
-
-逐个确认：(1) 能正常加载 (2) frontmatter 解析正确
-```
-
-这让 GLM（作为 Claude Code 执行者）先熟悉 skill 文件并提前发现兼容性问题——而不是在跑到一半时才报错。
-
-> ⚠️ **注意：** 替代模型的行为可能与 Claude 和 GPT-5.4 有所不同。你可能需要调整 skill 中的 `REVIEWER_MODEL` 并微调 prompt 模板以获得最佳效果。核心的跨模型架构不变。
+> ⚠️ **注意：** 替代模型的行为可能与 Claude 和 GPT-5.4 有所不同。你可能需要微调 prompt 模板以获得最佳效果。核心的跨模型架构不变。
 
 ## 📋 Roadmap
 

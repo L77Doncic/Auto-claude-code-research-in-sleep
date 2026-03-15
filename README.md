@@ -817,27 +817,30 @@ Override inline: `/research-lit "topic" — paper library: ~/Zotero/storage/`
 
 ## 🔀 Alternative Model Combinations
 
-Don't have Claude / OpenAI API access? You can swap in other models — same cross-model architecture, different providers. See the full [LLM API Mix-Match Guide](docs/LLM_API_MIX_MATCH_GUIDE.md) for 8+ provider configurations (DeepSeek, Kimi, SiliconFlow, etc.).
+Don't have Claude / OpenAI API access? You can swap in other models — same cross-model architecture, different providers.
 
-| Role | Default | Alt A: GLM + GPT | Alt B: GLM + MiniMax |
-|------|---------|-------------------|----------------------|
-| Executor (Claude Code) | Claude Opus/Sonnet | GLM-5 (ZhiPu API) | GLM-5 (ZhiPu API) |
-| Reviewer (Codex MCP) | GPT-5.4 | GPT-5.4 (OpenAI API) | MiniMax-M2.5 (MiniMax API) |
-| Need OpenAI API? | Yes | Yes | **No** |
+> ⭐ **We strongly recommend Claude + GPT-5.4 (default setup).** It's the most tested and reliable combination. Alternative setups work but may require prompt tuning.
 
-### Step 1: Install Claude Code & Codex CLI
+| | Executor | Reviewer | Need Claude API? | Need OpenAI API? | Guide |
+|---|----------|----------|:---:|:---:|-------|
+| **Default** ⭐ | Claude Opus/Sonnet | GPT-5.4 (Codex MCP) | Yes | Yes | [Quick Start](#-quick-start) |
+| **Alt A** | GLM-5 (Z.ai) | GPT-5.4 (Codex MCP) | No | Yes | [Setup below](#alt-a-glm--gpt) |
+| **Alt B** | GLM-5 (Z.ai) | MiniMax-M2.5 | No | No | [MINIMAX_MCP_GUIDE](docs/MINIMAX_MCP_GUIDE.md) |
+| **Alt C** | Any CC-compatible | Any OpenAI-compatible | Depends | No | [LLM_API_MIX_MATCH_GUIDE](docs/LLM_API_MIX_MATCH_GUIDE.md) |
+
+**Alt C** covers 8+ providers: DeepSeek, Kimi, SiliconFlow, 阿里百炼, 零一万物, etc. via the generic [`llm-chat`](mcp-servers/llm-chat/) MCP server.
+
+### Alt A: GLM + GPT
+
+Only replace the executor (Claude → GLM), keep GPT-5.4 as reviewer via Codex MCP.
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 npm install -g @openai/codex
+codex setup   # set model to gpt-5.4
 ```
 
-### Step 2: Configure `~/.claude/settings.json`
-
-Open with: `nano ~/.claude/settings.json`
-
-<details>
-<summary><b>Alt A: GLM (executor) + GPT (reviewer)</b> — Only replace Claude, keep GPT-5.4 as reviewer</summary>
+Configure `~/.claude/settings.json`:
 
 ```json
 {
@@ -852,9 +855,7 @@ Open with: `nano ~/.claude/settings.json`
     "mcpServers": {
         "codex": {
             "command": "/opt/homebrew/bin/codex",
-            "args": [
-                "mcp-server"
-            ]
+            "args": ["mcp-server"]
         }
     }
 }
@@ -862,82 +863,35 @@ Open with: `nano ~/.claude/settings.json`
 
 Codex CLI uses your existing `OPENAI_API_KEY` (from `~/.codex/config.toml` or environment) — no extra config needed for the reviewer side.
 
-</details>
+### Alt B: GLM + MiniMax
 
-<details>
-<summary><b>Alt B: GLM (executor) + MiniMax (reviewer)</b> — No Claude or OpenAI API needed</summary>
+No Claude or OpenAI API needed. Uses a custom MiniMax MCP server instead of Codex (because MiniMax doesn't support OpenAI's Responses API). Full guide: [`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md).
 
-```json
-{
-    "env": {
-        "ANTHROPIC_AUTH_TOKEN": "your_zai_api_key",
-        "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-        "API_TIMEOUT_MS": "3000000",
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
-        "MINIMAX_API_KEY": "your_minimax_api_key"
-    },
-    "mcpServers": {
-        "minimax-chat": {
-            "command": "/usr/bin/python3",
-            "args": ["/Users/YOUR_USERNAME/.claude/mcp-servers/minimax-chat/server.py"],
-            "env": {
-                "MINIMAX_API_KEY": "your_minimax_api_key",
-                "MINIMAX_BASE_URL": "https://api.minimax.chat/v1",
-                "MINIMAX_MODEL": "MiniMax-M2.5"
-            }
-        }
-    }
-}
-```
+### Alt C: Any Executor + Any Reviewer
 
-> **⚠️ Extra step for Alt B:** Codex MCP uses OpenAI's Responses API (`/v1/responses`), which MiniMax does not support ([details](https://github.com/openai/codex/discussions/7782)). So Alt B uses a **custom MiniMax MCP server** instead of Codex. Full guide: [`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md). Quick steps:
->
-> 1. Copy `mcp-servers/minimax-chat/server.py` → `~/.claude/mcp-servers/minimax-chat/server.py`
-> 2. `pip3 install httpx`
-> 3. After setup, tell Claude Code to rewrite all skills:
->
-> ```
-> Read skills/auto-review-loop-minimax/SKILL.md as a reference.
-> It replaces mcp__codex__codex with mcp__minimax-chat__minimax_chat.
-> Now rewrite ALL other skills that use mcp__codex__codex / mcp__codex__codex-reply
-> to use mcp__minimax-chat__minimax_chat instead, following the same pattern.
-> ```
+Mix and match freely using the generic `llm-chat` MCP server. Supports any OpenAI-compatible API as reviewer. Full guide: [`docs/LLM_API_MIX_MATCH_GUIDE.md`](docs/LLM_API_MIX_MATCH_GUIDE.md).
 
-</details>
+Example combinations: GLM + DeepSeek, Kimi + MiniMax, Claude + DeepSeek, LongCat + GLM, etc.
 
-Save: `Ctrl+O` → `Enter` → `Ctrl+X`
-
-### Step 3: Install Skills & Run
+### After Setup: Install Skills & Verify
 
 ```bash
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 cd Auto-claude-code-research-in-sleep
 cp -r skills/* ~/.claude/skills/
-
-# Launch Claude Code (now powered by GLM)
 claude
 ```
 
-### Step 4: Let GLM Read the Project ⚠️ IMPORTANT
+> **⚠️ For non-Claude executors (GLM, Kimi, etc.):** Let the model read through the project once to ensure skills are correctly parsed:
+>
+> ```
+> Read through this project and verify all skills are working:
+> /idea-creator, /research-review, /auto-review-loop, /novelty-check,
+> /idea-discovery, /research-pipeline, /research-lit, /run-experiment,
+> /analyze-results, /monitor-experiment, /pixel-art
+> ```
 
-> **🔴 Do NOT skip this step.** GLM's prompt handling differs from Claude's. You must let GLM read through the project once to ensure skills are correctly parsed.
-
-After launching `claude`, run in the conversation:
-
-```
-Read through this project and verify all skills are working:
-/idea-creator, /research-review, /auto-review-loop, /novelty-check,
-/idea-discovery, /research-pipeline, /research-lit, /run-experiment,
-/analyze-results, /monitor-experiment, /pixel-art
-
-For each skill, confirm: (1) it loads without errors, (2) the frontmatter is parsed correctly.
-```
-
-This lets GLM (acting as Claude Code) familiarize itself with the skill files and catch any compatibility issues upfront — rather than discovering them mid-workflow when it's expensive to fail.
-
-> ⚠️ **Note:** Alternative models may behave differently from Claude and GPT-5.4. You may need to adjust `REVIEWER_MODEL` in the skills and tune prompt templates for best results. The core cross-model architecture remains the same.
+> ⚠️ **Note:** Alternative models may behave differently from Claude and GPT-5.4. You may need to tune prompt templates for best results. The core cross-model architecture remains the same.
 
 ## 📋 Roadmap
 
