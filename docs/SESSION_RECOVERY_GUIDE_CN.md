@@ -66,7 +66,7 @@ LLM 应在以下情况发生时**立即更新**：
 
 ### 为什么需要 Research Contract
 
-工作流 1（`/idea-discovery`）完成后，`IDEA_REPORT.md` 包含 8-12 个候选 idea。一旦选定一个进入实现阶段，把所有候选都留在上下文中会浪费 LLM 的工作记忆、降低输出质量。
+工作流 1（`/idea-discovery`）完成后，`idea-stage/IDEA_REPORT.md` 包含 8-12 个候选 idea。一旦选定一个进入实现阶段，把所有候选都留在上下文中会浪费 LLM 的工作记忆、降低输出质量。
 
 **`idea-stage/docs/research_contract.md`** 解决这个问题：只提取*当前正在做的那一个 idea* 到一份聚焦的工作文档——claim、实验设计、baseline、结果。新 session 读这个，而不是读整个 IDEA_REPORT.md。模板见 [`templates/RESEARCH_CONTRACT_TEMPLATE.md`](../templates/RESEARCH_CONTRACT_TEMPLATE.md)。
 
