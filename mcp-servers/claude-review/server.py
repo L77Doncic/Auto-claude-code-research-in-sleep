@@ -38,7 +38,8 @@ DEFAULT_MODEL = os.environ.get("CLAUDE_REVIEW_MODEL", "")
 DEFAULT_SYSTEM = os.environ.get("CLAUDE_REVIEW_SYSTEM", "")
 DEFAULT_TOOLS = os.environ.get("CLAUDE_REVIEW_TOOLS", "")
 DEFAULT_TIMEOUT_SEC = int(os.environ.get("CLAUDE_REVIEW_TIMEOUT_SEC", "600"))
-DEBUG_LOG = Path(os.environ.get("CLAUDE_REVIEW_DEBUG_LOG", f"/tmp/{SERVER_NAME}-mcp-debug.log"))
+_default_debug_dir = os.environ.get("TEMP", "/tmp") if sys.platform == "win32" else "/tmp"
+DEBUG_LOG = Path(os.environ.get("CLAUDE_REVIEW_DEBUG_LOG", f"{_default_debug_dir}/{SERVER_NAME}-mcp-debug.log"))
 STATE_DIR = Path(
     os.environ.get(
         "CLAUDE_REVIEW_STATE_DIR",
@@ -195,6 +196,15 @@ def job_state_path(job_id: str) -> Path:
 def is_pid_alive(pid: int | None) -> bool:
     if not pid or pid <= 0:
         return False
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        SYNCHRONIZE = 0x00100000
+        handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return False
     try:
         os.kill(pid, 0)
     except OSError:
@@ -277,6 +287,8 @@ def run_claude_review(
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             stdin=subprocess.DEVNULL,
             timeout=DEFAULT_TIMEOUT_SEC,
             check=False,
@@ -284,9 +296,9 @@ def run_claude_review(
     except subprocess.TimeoutExpired:
         return None, f"Claude review timed out after {DEFAULT_TIMEOUT_SEC} seconds"
 
-    payload, parse_error = parse_claude_json(result.stdout)
+    payload, parse_error = parse_claude_json(result.stdout or "")
     if parse_error:
-        stderr = result.stderr.strip()
+        stderr = (result.stderr or "").strip()
         message = parse_error if not stderr else f"{parse_error}. stderr: {stderr}"
         return None, message
 
@@ -309,7 +321,7 @@ def run_claude_review(
             payload.get("result")
             or payload.get("error")
             or errors_text
-            or result.stderr.strip()
+            or (result.stderr or "").strip()
             or "Claude review failed"
         )
         return None, message
@@ -358,14 +370,28 @@ def start_async_review(
     job_path = job_state_path(job_id)
     write_json(job_path, job)
 
+    worker_out_path = JOBS_DIR / f"{job_id}.worker.out.log"
+    worker_err_path = JOBS_DIR / f"{job_id}.worker.err.log"
+    stdout_fh = None
+    stderr_fh = None
     try:
+        stdout_fh = open(worker_out_path, "w")
+        stderr_fh = open(worker_err_path, "w")
+        popen_kwargs: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": stdout_fh,
+            "stderr": stderr_fh,
+            "cwd": os.getcwd(),
+        }
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["close_fds"] = True
+            popen_kwargs["start_new_session"] = True
+
         worker = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "--run-job", job_id],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-            start_new_session=True,
+            **popen_kwargs,
         )
     except OSError as exc:
         job["status"] = "failed"
@@ -374,6 +400,11 @@ def start_async_review(
         job["error"] = f"Failed to launch background review worker: {exc}"
         write_json(job_path, job)
         return None, job["error"]
+    finally:
+        if stdout_fh:
+            stdout_fh.close()
+        if stderr_fh:
+            stderr_fh.close()
 
     job["workerPid"] = worker.pid
     job["updatedAt"] = utc_now()

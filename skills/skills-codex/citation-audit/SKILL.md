@@ -1,11 +1,16 @@
 ---
 name: citation-audit
-description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports. Uses a fresh cross-model reviewer with web/DBLP/arXiv lookup to catch hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations (cite present but the cited paper does not establish the claim). Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
+description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports — catching hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations. Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
 argument-hint: "[paper-directory-or-bib-file] [--uncited] [— soft-only]"
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, WebSearch, WebFetch
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, WebSearch, WebFetch
 ---
 
 # Citation Audit
+
+> **Codex assurance:** base audit artifacts record
+> `review_independence: same-family` and `acceptance_status: provisional`.
+> Cross-family overlays or deterministic metadata checks may record accepted;
+> unavailable semantic review emits BLOCKED.
 
 Verify every `\cite{...}` in a paper against three independent layers:
 
@@ -38,12 +43,13 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.5`** — Used via Codex MCP. Default for cross-model review with web access.
-- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Never `codex-reply`.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Fresh Codex reviewer with web access; same-family provisional in the base mirror.
+- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Continue only with `send_input` when explicitly resuming the same audit.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
 - **SOFT_ONLY = `false`** — When true (set via `— soft-only` / `— soft_only` flag), the audit runs all three layers normally but **forbids any `.bib` file mutation**. Findings that would otherwise mutate the bib (FIX / REPLACE / REMOVE) are translated into per-occurrence sentence-rewrite proposals against the citing `*.tex` files. Used by `/resubmit-pipeline` Phase 1 to honor the user's hard "freeze the bib" constraint.
+- **RENDER_HTML = true** — When `true` (default), auto-render `CITATION_AUDIT.md` to HTML after writing the report. Uses **full review gate** (audit-class artifact). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the audit verdict.
 
 ## Workflow
 
@@ -72,13 +78,13 @@ If the user passed `--uncited`, also compute the set difference `bib_keys \ cite
 
 Save the extracted contexts to `paper/.aris/citation-audit/contexts.txt` so the reviewer can read it directly. Use the paper-dir-relative path `.aris/citation-audit/contexts.txt` when recording the file in `audited_input_hashes`; do not stage under `/tmp` or other transient locations that the verifier cannot rehash later.
 
-### Step 3: Send each entry to fresh cross-model reviewer
+### Step 3: Send each entry to a fresh reviewer (same-family provisional by default)
 
 For each **cited** bib entry — i.e., each key in `cited_keys` with at least one extracted citation context — launch a fresh Codex reviewer agent. Do not reuse the same reviewer across entries. Do **not** spawn an agent for entries in `bib_keys \ cited_keys`; those are detect-only and surface only when `--uncited` is explicitly enabled (see "Uncited Entry Detection" below).
 
 ```
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     You are auditing a bibliographic entry. Use web/DBLP/arXiv search.
@@ -286,7 +292,7 @@ If the bib file cannot be read well enough to audit even the cited entries, fall
 | `/paper-claim-audit` | Numerical claims in manuscript | Number inflation, best-seed cherry-pick, config mismatch |
 | `/citation-audit` | Bibliographic entries | Hallucinated refs, wrong-context citations, metadata errors |
 
-Together: code → result → numerical claim → cited claim. Each layer has cross-family review with no executor in the validator path.
+Together: code → result → numerical claim → cited claim. Each layer uses a fresh validator context; base Codex results are same-family provisional and overlays may be cross-family accepted.
 
 ## Known Limitations
 
@@ -306,6 +312,7 @@ After each reviewer agent call, save the trace following `shared-references/revi
 - `.aris/traces/citation-audit/<date>_runNN/` (per-entry review traces)
 - Optional: applied fixes to `references.bib` + `sec/*.tex` (with `--apply` flag)
 - Optional: `details.uncited_entries` field in JSON + `## Uncited Entries (opt-in)` MD section (with `--uncited` flag; field absent and section omitted when flag is unset)
+- `CITATION_AUDIT.html` (when `RENDER_HTML = true`, default) — auto-rendered single-file HTML view via `/render-html "CITATION_AUDIT.md" --json "CITATION_AUDIT.json"`. Full review gate. Sidecar `.review.json` carries render-fidelity verdict. **Non-blocking**: failures are logged and the audit MD + JSON remain the canonical outputs.
 
 ## Optional: Soft-Only Mode (— soft-only)
 
@@ -412,7 +419,12 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/citation-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "gpt-5.5",
+  "executor_model":   "codex-gpt-5.6-sol",
+  "executor_family":  "openai",
+  "reviewer_model":   "gpt-5.6-sol",
+  "reviewer_family":  "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "reviewer_reasoning": "xhigh",
   "generated_at":     "<UTC ISO-8601>",
   "details": {

@@ -1,7 +1,7 @@
 ---
 name: exa-search
 description: AI-powered web search via Exa with content extraction. Use when user says "exa search", "web search with content", "find similar pages", or needs broad web results beyond academic databases (arXiv, Semantic Scholar).
-argument-hint: [search-query-or-url]
+argument-hint: "[search-query-or-url]"
 allowed-tools: Bash(*), Read, Write
 ---
 
@@ -88,7 +88,7 @@ EXA_FETCHER=""
 [ -z "$EXA_FETCHER" ] && [ -f ~/.codex/skills/exa-search/exa_search.py ] && EXA_FETCHER="$HOME/.codex/skills/exa-search/exa_search.py"
 [ -z "$EXA_FETCHER" ] && {
   echo "ERROR: exa_search.py not resolved at \$ARIS_REPO/tools/, tools/, or ~/.codex/skills/exa-search/." >&2
-  echo "       Fix: rerun bash tools/install_aris_codex.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  echo "       Fix: rerun tools/install_aris_codex.sh, export ARIS_REPO, or copy the helper to ~/.codex/skills/exa-search/." >&2
   echo "       Also ensure 'exa-py' is installed: pip install exa-py" >&2
   exit 1
 }
